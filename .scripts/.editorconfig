@@ -1,0 +1,13 @@
+# Root EditorConfig file for the project
+root = true
+
+# Global settings for all files
+[*]
+# Trim trailing whitespace
+trim_trailing_whitespace = true
+
+# Ensure files end with a single newline
+insert_final_newline = true
+
+[*.bicep]
+end_of_line = lf
