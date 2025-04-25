@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param (
     [Parameter(Mandatory = $true)]
+    [ArgumentCompleter({
+            param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+            @("clean", "lint", "format", "compile", "build", "verify-format") | Where-Object { $_ -like "$wordToComplete*" }
+        })]
     [string[]]$Tasks
 )
 
