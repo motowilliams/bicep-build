@@ -4,6 +4,22 @@ param (
     [string[]]$Tasks
 )
 
+# Helper function to process files
+function ProcessFiles {
+    param (
+        [string]$TaskName,
+        [string]$FileExtension,
+        [scriptblock]$Action
+    )
+
+    Write-Host "Running $TaskName task..."
+    Get-ChildItem -Path . -Recurse -Include *.$FileExtension | ForEach-Object {
+        & $Action $_.FullName
+        Write-Host "- $TaskName completed for: $($_.FullName)"
+    }
+    Write-Host "$TaskName task completed."
+}
+
 function Clean {
     Write-Host "Running clean task..."
     # Delete all *.sarif files in the project
@@ -12,33 +28,24 @@ function Clean {
 }
 
 function Lint {
-    Write-Host "Running lint task..."
-    # Lint all Bicep files in the project
-    Get-ChildItem -Path . -Recurse -Include *.bicep | ForEach-Object {
-        bicep lint $_.FullName --diagnostics-format sarif | Out-Null
-        Write-Host "Linted: $($_.FullName)"
+    ProcessFiles -TaskName "lint" -FileExtension "bicep" -Action {
+        param ($FilePath)
+        bicep lint $FilePath --diagnostics-format sarif | Out-Null
     }
-    Write-Host "Lint task completed."
 }
 
 function Format {
-    Write-Host "Running format task..."
-    # Format all Bicep files in the project
-    Get-ChildItem -Path . -Recurse -Include *.bicep | ForEach-Object {
-        bicep format $_.FullName --outfile $_.FullName --force
-        Write-Host "Formatted: $($_.FullName)"
+    ProcessFiles -TaskName "format" -FileExtension "bicep" -Action {
+        param ($FilePath)
+        bicep format $FilePath --outfile $FilePath
     }
-    Write-Host "Format task completed."
 }
 
 function Compile {
-    Write-Host "Running compile task..."
-    # Compile all Bicep files in the project
-    Get-ChildItem -Path . -Recurse -Include *.bicep | ForEach-Object {
-        bicep build $_.FullName --outfile "$($_.DirectoryName)\$($_.BaseName).json"
-        Write-Host "Compiled: $($_.FullName)"
+    ProcessFiles -TaskName "compile" -FileExtension "bicep" -Action {
+        param ($FilePath)
+        bicep build $FilePath --outfile "$([System.IO.Path]::ChangeExtension($FilePath, 'json'))"
     }
-    Write-Host "Compile task completed."
 }
 
 function Build {
