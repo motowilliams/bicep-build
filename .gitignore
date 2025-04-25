@@ -2,3 +2,5 @@ test.bicep
 *.lint
 *.sarif
 modules/**/*.json
+
+!modules/**/version.json

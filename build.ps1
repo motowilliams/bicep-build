@@ -49,7 +49,14 @@ function Format {
 function Compile {
     ProcessFiles -TaskName "compile" -FileExtension "bicep" -Action {
         param ($FilePath)
-        bicep build $FilePath --outfile "$([System.IO.Path]::ChangeExtension($FilePath, 'json'))"
+        bicep build $FilePath --stdout | Out-Null
+        $errorCode = $LASTEXITCODE
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "==================== COMPILATION FAILED ==========================="
+            Write-Error "Compilation failed for: $FilePath. Check the Bicep file for errors."
+            Write-Error "==================================================================="
+            throw $errorCode
+        }
     }
 }
 
