@@ -3,9 +3,10 @@ param (
     [Parameter(Mandatory = $true)]
     [ArgumentCompleter({
             param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
-            @("clean", "lint", "format", "compile", "build", "verify-format") | Where-Object { $_ -like "$wordToComplete*" }
+            @("clean", "lint", "format", "compile", "build", "verify-format", "verify-version-files") | Where-Object { $_ -like "$wordToComplete*" }
         })]
-    [string[]]$Tasks
+    [string[]] $Tasks,
+    [string] $ModuleDirectory = "modules"  # Default to current directory if not specified
 )
 
 # Helper function to process files
@@ -13,12 +14,11 @@ function ProcessFiles {
     param (
         [string]$TaskName,
         [string]$FileExtension,
-        [scriptblock]$Action,
-        [string]$Directory = "modules"  # Default to current directory if not specified
+        [scriptblock]$Action
     )
 
     Write-Host "Running $TaskName task..."
-    Get-ChildItem -Path $Directory -Recurse -Include *.$FileExtension | ForEach-Object {
+    Get-ChildItem -Path $ModuleDirectory -Recurse -Include *.$FileExtension | ForEach-Object {
         & $Action $_.FullName
         Write-Host "- $TaskName completed for: $($_.FullName)"
     }
@@ -82,6 +82,58 @@ function VerifyFormat {
     Write-Host "Verify-format task completed. No uncommitted changes detected."
 }
 
+function VerifyVersionFiles {
+    Write-Host "Running verify-version-files task..."
+
+    # Define the regex patterns for valid version formats
+    $validVersionPatterns = @(
+        '^\d{4}-\d{2}-\d{2}$', # Format: YYYY-MM-DD
+        '^\d{4}-\d{2}-\d{2}-preview$' # Format: YYYY-MM-DD-preview
+    )
+
+    # Get all Bicep module files
+    $bicepFiles = Get-ChildItem -Path $ModuleDirectory -Recurse -Include *.bicep
+
+    foreach ($bicepFile in $bicepFiles) {
+        $versionFilePath = Join-Path -Path $bicepFile.DirectoryName -ChildPath "version.json"
+
+        if (-not (Test-Path $versionFilePath)) {
+            Write-Error "Missing version.json file for module: $($bicepFile.FullName)"
+            exit 1
+        }
+
+        # Validate the version.json file
+        try {
+            $versionData = Get-Content -Path $versionFilePath | ConvertFrom-Json
+
+            if (-not $versionData.version) {
+                Write-Error "version.json file is missing the 'version' (format YYYY-MM-DD / YYYY-MM-DD-preview) property: $versionFilePath"
+                exit 1
+            }
+
+            $isValidVersion = $false
+            foreach ($pattern in $validVersionPatterns) {
+                if ($versionData.version -match $pattern) {
+                    $isValidVersion = $true
+                    break
+                }
+            }
+
+            if (-not $isValidVersion) {
+                Write-Error "Invalid version format in file: $versionFilePath. Found: $($versionData.version)"
+                exit 1
+            }
+
+        }
+        catch {
+            Write-Error "Failed to parse version.json file: $versionFilePath. Error: $_"
+            exit 1
+        }
+    }
+
+    Write-Host "verify-version-files task completed successfully. All version.json files are valid."
+}
+
 # Task runner logic
 foreach ($Task in $Tasks) {
     switch ($Task.Trim().ToLower()) {
@@ -91,6 +143,7 @@ foreach ($Task in $Tasks) {
         "format" { Format }
         "lint" { Lint }
         "verify-format" { VerifyFormat }
+        "verify-version-files" { VerifyVersionFiles }
         default { Write-Error "Unknown task: $Task" }
     }
 }
