@@ -55,9 +55,11 @@ function Compile {
 function Build {
     Write-Host "Running build task..."
     # Aggregate task: lint, format, and compile
+    Clean
     Lint
     Format
     Compile
+    VerifyFormat 
     Write-Host "Build task completed."
 }
 
@@ -75,11 +77,11 @@ function VerifyFormat {
 # Task runner logic
 foreach ($Task in $Tasks) {
     switch ($Task.Trim().ToLower()) {
-        "clean" { Clean }
-        "lint" { Lint }
-        "format" { Format }
-        "compile" { Compile }
         "build" { Build }
+        "clean" { Clean }
+        "compile" { Compile }
+        "format" { Format }
+        "lint" { Lint }
         "verify-format" { VerifyFormat }
         default { Write-Error "Unknown task: $Task" }
     }
