@@ -13,11 +13,12 @@ function ProcessFiles {
     param (
         [string]$TaskName,
         [string]$FileExtension,
-        [scriptblock]$Action
+        [scriptblock]$Action,
+        [string]$Directory = "modules"  # Default to current directory if not specified
     )
 
     Write-Host "Running $TaskName task..."
-    Get-ChildItem -Path . -Recurse -Include *.$FileExtension | ForEach-Object {
+    Get-ChildItem -Path $Directory -Recurse -Include *.$FileExtension | ForEach-Object {
         & $Action $_.FullName
         Write-Host "- $TaskName completed for: $($_.FullName)"
     }
