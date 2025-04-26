@@ -32,9 +32,13 @@ function Clean {
     Write-Line
     Write-Host "Running clean task..."
     Write-Line
+    $fileSplat = "*.sarif"
     # Delete all *.sarif files in the project
-    Get-ChildItem -Path . -Recurse -Include *.sarif | Remove-Item -Force -ErrorAction SilentlyContinue
-    Write-Host "Clean task completed. All *.sarif files have been deleted."
+    Get-ChildItem -Path . -Recurse -Include $fileSplat | ForEach-Object {
+        Write-Host " - Deleting: $(Resolve-Path -Relative -Path $_.FullName)"
+        Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "Clean task completed. All $fileSplat files have been deleted."
     Write-Line
 }
 
