@@ -99,7 +99,9 @@ function VerifyVersionFiles {
     Write-Line
     Write-Host "Running verify-version-files task..."
     Write-Line
-    
+
+    $versionFileName = "version.json"
+
     # Define the regex patterns for valid version formats
     $validVersionPatterns = @(
         '^\d{4}-\d{2}-\d{2}$', # Format: YYYY-MM-DD
@@ -112,20 +114,20 @@ function VerifyVersionFiles {
     $bicepFiles = Get-ChildItem -Path $ModuleDirectory -Recurse -Include *.bicep
 
     foreach ($bicepFile in $bicepFiles) {
-        $versionFilePath = Join-Path -Path $bicepFile.DirectoryName -ChildPath "version.json"
+        $versionFilePath = Join-Path -Path $bicepFile.DirectoryName -ChildPath $versionFileName
 
         if (-not (Test-Path $versionFilePath)) {
-            Write-Error "Missing version.json file for module: $($bicepFile.FullName)"
+            Write-Error "Missing $versionFileName file for module: $($bicepFile.FullName)"
             Write-Line
             exit 1
         }
 
-        # Validate the version.json file
+        # Validate the version file
         try {
             $versionData = Get-Content -Path $versionFilePath | ConvertFrom-Json
 
             if (-not $versionData.version) {
-                Write-Error "version.json file is missing the 'version' $formatExample property: $versionFilePath"
+                Write-Error "$versionFileName file is missing the 'version' $formatExample property: $versionFilePath"
                 Write-Line
                 exit 1
             }
@@ -146,13 +148,13 @@ function VerifyVersionFiles {
 
         }
         catch {
-            Write-Error "Failed to parse version.json file: $versionFilePath. Error: $_"
+            Write-Error "Failed to parse $versionFileName file: $versionFilePath. Error: $_"
             Write-Line
             exit 1
         }
     }
 
-    Write-Host "verify-version-files task completed successfully. All version.json files are valid."
+    Write-Host "verify-version-files task completed successfully. All $versionFileName files are valid."
     Write-Line
 }
 
@@ -280,8 +282,8 @@ function AddModule {
     $mainBicepPath = Join-Path -Path $modulePath -ChildPath "main.bicep"
     New-Item -ItemType File -Path $mainBicepPath -Force | Out-Null
 
-    # Create version.json file with current date and preview flag
-    $versionFilePath = Join-Path -Path $modulePath -ChildPath "version.json"
+    # Create version file with current date and preview flag
+    $versionFilePath = Join-Path -Path $modulePath -ChildPath $versionFileName
     $currentDate = Get-Date -Format "yyyy-MM-dd"
     $versionContent = @{ version = "$currentDate-preview" } | ConvertTo-Json -Depth 99
     New-Item -ItemType File -Path $versionFilePath -Value $versionContent -Force | Out-Null
