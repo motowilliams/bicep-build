@@ -296,6 +296,11 @@ function AddModule {
     # continue building the module path, adding the module name
     $modulePath = Join-Path -Path $modulePath -ChildPath $moduleName
 
+    if (Test-Path -Path $modulePath) {
+        Write-Host "Module '$moduleName' already exists under '$categoryName'. Exiting add-module task." -ForegroundColor Yellow
+        return
+    }
+
     # Create blank main.bicep file
     $mainBicepPath = Join-Path -Path $modulePath -ChildPath "main.bicep"
     New-Item -ItemType File -Path $mainBicepPath -Force | Out-Null
