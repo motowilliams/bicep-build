@@ -106,6 +106,8 @@ function VerifyVersionFiles {
         '^\d{4}-\d{2}-\d{2}-preview$' # Format: YYYY-MM-DD-preview
     )
 
+    $formatExample = "(format YYYY-MM-DD / YYYY-MM-DD-preview)"
+
     # Get all Bicep module files
     $bicepFiles = Get-ChildItem -Path $ModuleDirectory -Recurse -Include *.bicep
 
@@ -123,7 +125,7 @@ function VerifyVersionFiles {
             $versionData = Get-Content -Path $versionFilePath | ConvertFrom-Json
 
             if (-not $versionData.version) {
-                Write-Error "version.json file is missing the 'version' (format YYYY-MM-DD / YYYY-MM-DD-preview) property: $versionFilePath"
+                Write-Error "version.json file is missing the 'version' $formatExample property: $versionFilePath"
                 Write-Line
                 exit 1
             }
@@ -137,7 +139,7 @@ function VerifyVersionFiles {
             }
 
             if (-not $isValidVersion) {
-                Write-Error "Invalid version format in file: $versionFilePath. Found: $($versionData.version)"
+                Write-Error "Invalid version format in file: $versionFilePath. Found: $($versionData.version). Expected format: $formatExample"
                 Write-Line
                 exit 1
             }
