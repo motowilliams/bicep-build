@@ -67,7 +67,7 @@ function Build {
     Lint
     Format
     Compile
-    VerifyFormat 
+    VerifyFormat
     Write-Host "Build task completed."
 }
 
@@ -139,95 +139,95 @@ function Get-CategoryDirectory {
     param (
         [Parameter(Mandatory = $false)]
         [string]$Path = (Get-Location).Path,
-            
+
         [Parameter(Mandatory = $false)]
         [string]$Title = "Select a directory:",
-            
+
         [Parameter(Mandatory = $false)]
         [string]$NewDirPrompt = "Enter name for new directory:"
     )
-        
+
     # Ensure path exists
     if (-not (Test-Path -Path $Path -PathType Container)) {
         Write-Error "The specified path does not exist or is not a directory: $Path"
         return $null
     }
-        
+
     # Get all directories in the specified path
     $directories = Get-ChildItem -Path $Path -Directory | Sort-Object Name
-        
+
     # Clear console and display header
     Clear-Host
     Write-Host $Title -ForegroundColor Cyan
     Write-Host "Available directories in $Path" -ForegroundColor Cyan
     Write-Host ("-" * 50) -ForegroundColor Gray
-        
+
     # Display directories with indices
     $index = 1
     foreach ($dir in $directories) {
         Write-Host "$index. $($dir.Name)"
         $index++
     }
-        
-    # Add create new directory option
-    Write-Host "$index. Create New Directory" -ForegroundColor Green
-    $createNewDirIndex = $index
-    $index++
-        
-    # Add cancel option
-    Write-Host "$index. Cancel" -ForegroundColor Red
-    $cancelIndex = $index
-        
+
     Write-Host ("-" * 50) -ForegroundColor Gray
-        
+    # Add create new directory option
+    Write-Host "N. Create New Category Directory" -ForegroundColor Green
+    $createNewDirIndex = 'N'
+
+    # Add cancel option
+    Write-Host "C. Cancel" -ForegroundColor Red
+    $cancelIndex = 'C'
+
+    Write-Host ("-" * 50) -ForegroundColor Gray
+
     # Get user selection with input validation
     $validSelection = $false
     $selection = $null
-        
+
     while (-not $validSelection) {
-        $input = Read-Host "Enter selection (1-$index)"
-            
-        # Validate input is a number
-        if ($input -match '^\d+$') {
-            $selection = [int]$input
-                
-            # Validate number is in range
-            if ($selection -ge 1 -and $selection -le $index) {
+        $input = Read-Host "Enter selection (1-$index, N, C)"
+
+        # Validate input is a number or 'N'/'C'
+        if ($input -match '^(\d+|N|C)$') {
+            $selection = $input
+
+            # Validate number is in range or is 'N'/'C'
+            if (($selection -ge 1 -and $selection -le $index) -or $selection -eq $createNewDirIndex -or $selection -eq $cancelIndex) {
                 $validSelection = $true
             }
             else {
-                Write-Host "Invalid selection. Please enter a number between 1 and $index." -ForegroundColor Yellow
+                Write-Host "Invalid selection. Please enter a number between 1 and $index, or $createNewDirIndex/$cancelIndex." -ForegroundColor Yellow
             }
         }
         else {
-            Write-Host "Invalid input. Please enter a number." -ForegroundColor Yellow
+            Write-Host "Invalid input. Please enter a number, $createNewDirIndex, or $cancelIndex." -ForegroundColor Yellow
         }
     }
-        
+
     # Process the user's selection
-    if ($selection -eq $cancelIndex) {
+    if ($selection -eq 'C') {
         # User selected Cancel
         Write-Host "Operation cancelled." -ForegroundColor Yellow
-        return $null
+        exit 0
     }
-    elseif ($selection -eq $createNewDirIndex) {
-        # User selected Create New Directory
+    elseif ($selection -eq 'N') {
+        # User selected Create New Category Directory
         Write-Host $NewDirPrompt -ForegroundColor Cyan
         $newDirName = Read-Host
-            
+
         if ([string]::IsNullOrWhiteSpace($newDirName)) {
             Write-Host "No directory name provided. Operation cancelled." -ForegroundColor Yellow
             return $null
         }
-            
+
         $newDirPath = Join-Path -Path $Path -ChildPath $newDirName
-            
+
         # Check if directory already exists
         if (Test-Path -Path $newDirPath -PathType Container) {
             Write-Host "Directory already exists: $newDirPath" -ForegroundColor Yellow
             return $newDirPath
         }
-            
+
         try {
             # Create the new directory
             $newDir = New-Item -Path $newDirPath -ItemType Directory -ErrorAction Stop
@@ -242,8 +242,27 @@ function Get-CategoryDirectory {
     else {
         # User selected an existing directory
         $selectedDir = $directories[$selection - 1]
-        Write-Host "Selected directory: $($selectedDir.FullName)" -ForegroundColor Green
-        return $selectedDir.FullName
+
+function New-Directory {
+    param (
+        [string]$Path
+    )
+
+    # Check if directory already exists
+    if (Test-Path -Path $Path -PathType Container) {
+        Write-Host "Directory already exists: $Path" -ForegroundColor Yellow
+        return Get-Item -Path $Path
+    }
+
+    try {
+        # Create the new directory
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        Write-Host "Created new directory: $Path" -ForegroundColor Green
+        return Get-Item -Path $Path
+    }
+    catch {
+        Write-Error "Failed to create directory: $Path"
+        return $null
     }
 }
 
