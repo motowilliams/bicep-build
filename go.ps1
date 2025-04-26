@@ -17,19 +17,25 @@ function ProcessFiles {
         [scriptblock]$Action
     )
 
-    Write-Host "Running $TaskName task..."
+    Write-Line
+    Write-Host "Running $TaskName Task"
+    Write-Line
     Get-ChildItem -Path $ModuleDirectory -Recurse -Include *.$FileExtension | ForEach-Object {
         & $Action $_.FullName
         Write-Host "- $TaskName completed for: $($_.FullName)"
     }
-    Write-Host "$TaskName task completed."
+    # Write-Host "$TaskName Task completed"
+    Write-Line
 }
 
 function Clean {
+    Write-Line
     Write-Host "Running clean task..."
+    Write-Line
     # Delete all *.sarif files in the project
     Get-ChildItem -Path . -Recurse -Include *.sarif | Remove-Item -Force -ErrorAction SilentlyContinue
     Write-Host "Clean task completed. All *.sarif files have been deleted."
+    Write-Line
 }
 
 function Lint {
@@ -60,20 +66,38 @@ function Compile {
     }
 }
 
-function VerifyFormat {
+function CheckModuleGitIndex {
+    param (
+        [string]$Path
+    )
+
+    Write-Line
     Write-Host "Running verify-format task..."
+    Write-Line
+
     # Run git status to check if the index is dirty
     $gitStatus = git status --porcelain
+
     if (-not [string]::IsNullOrWhiteSpace($gitStatus)) {
-        Write-Error "Verify-format failed: There are uncommitted changes after formatting. Ensure all files are formatted correctly before committing."
-        exit 1
+        # Check if the specified path exists in the git status output
+        if ($gitStatus -match [regex]::Escape($Path)) {
+            Write-Warning "Verify-format failed: There are uncommitted changes in the specified path: $Path."
+            Write-Warning "Ensure all bicep files are formatted correctly and with LF endings before committing."
+            Write-Warning $($gitStatus | Where-Object { $_ -like "*$Path*" } | Format-List | Out-String)
+            Write-Line
+            exit 1
+        }
     }
-    Write-Host "Verify-format task completed. No uncommitted changes detected."
+
+    Write-Host "Verify-format task completed. No uncommitted changes detected in the specified path: $Path."
+    Write-Line
 }
 
 function VerifyVersionFiles {
+    Write-Line
     Write-Host "Running verify-version-files task..."
-
+    Write-Line
+    
     # Define the regex patterns for valid version formats
     $validVersionPatterns = @(
         '^\d{4}-\d{2}-\d{2}$', # Format: YYYY-MM-DD
@@ -88,6 +112,7 @@ function VerifyVersionFiles {
 
         if (-not (Test-Path $versionFilePath)) {
             Write-Error "Missing version.json file for module: $($bicepFile.FullName)"
+            Write-Line
             exit 1
         }
 
@@ -97,6 +122,7 @@ function VerifyVersionFiles {
 
             if (-not $versionData.version) {
                 Write-Error "version.json file is missing the 'version' (format YYYY-MM-DD / YYYY-MM-DD-preview) property: $versionFilePath"
+                Write-Line
                 exit 1
             }
 
@@ -110,17 +136,24 @@ function VerifyVersionFiles {
 
             if (-not $isValidVersion) {
                 Write-Error "Invalid version format in file: $versionFilePath. Found: $($versionData.version)"
+                Write-Line
                 exit 1
             }
 
         }
         catch {
             Write-Error "Failed to parse version.json file: $versionFilePath. Error: $_"
+            Write-Line
             exit 1
         }
     }
 
     Write-Host "verify-version-files task completed successfully. All version.json files are valid."
+    Write-Line
+}
+
+function Write-Line { 
+    Write-Host ("-" * 72) -ForegroundColor Gray
 }
 
 function Get-CategoryDirectory {
@@ -136,7 +169,6 @@ function Get-CategoryDirectory {
         [string]$NewDirPrompt = "Enter name for new directory:"
     )
 
-    function Write-Line { Write-Host ("-" * 50) -ForegroundColor Gray }
 
     # Ensure path exists
     if (-not (Test-Path -Path $Path -PathType Container)) {
@@ -219,7 +251,7 @@ function Get-CategoryDirectory {
 }
 
 function AddModule {
-    Write-Host "Running add-module task..."
+    Write-Line; Write-Host "Running add-module task..."
 
     $categoryName = Get-CategoryDirectory -Path $ModuleDirectory -Title "Select a category to add a module to:" -NewDirPrompt "Enter name for new category:" 
     if ([System.String]::IsNullOrWhiteSpace($categoryName)) {
@@ -260,7 +292,7 @@ function Build {
     Lint
     Format
     Compile
-    VerifyFormat
+    CheckModuleGitIndex
     Write-Host "Build task completed."
 }
 
@@ -281,7 +313,7 @@ foreach ($Task in $Tasks) {
         "compile" { Compile }
         "format" { Format }
         "lint" { Lint }
-        "verify-format" { VerifyFormat }
+        "verify-format" { CheckModuleGitIndex -Path $ModuleDirectory }
         "verify-version-files" { VerifyVersionFiles }
         "add-module" { AddModule }
         default { Write-Error "Unknown task: $Task" }
