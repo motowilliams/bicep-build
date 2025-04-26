@@ -9,6 +9,8 @@ param (
     [string] $ModuleDirectory = "modules"  # Default to current directory if not specified
 )
 
+$versionFileName = "version.json"
+
 # Helper function to process files
 function ProcessFiles {
     param (
@@ -117,8 +119,6 @@ function VerifyVersionFiles {
     Write-Line
     Write-Host "Running verify-version-files task..."
     Write-Line
-
-    $versionFileName = "version.json"
 
     # Define the regex patterns for valid version formats
     $validVersionPatterns = @(
