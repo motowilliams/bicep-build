@@ -21,7 +21,7 @@ function ProcessFiles {
     Write-Host "Running $TaskName Task"
     Write-Line
     Get-ChildItem -Path $ModuleDirectory -Recurse -Include *.$FileExtension | ForEach-Object {
-        & $Action $_.FullName
+        & $Action $_
         Write-Host " - $TaskName completed for: $(Resolve-Path -Relative -Path $_.FullName)"
     }
     # Write-Host "$TaskName Task completed"
@@ -45,7 +45,19 @@ function Clean {
 function Lint {
     ProcessFiles -TaskName "lint" -FileExtension "bicep" -Action {
         param ($FilePath)
-        bicep lint $FilePath --diagnostics-format sarif | Out-Null
+        $lintFile = "$($FilePath.Directory.Parent.Name).$($FilePath.Directory.Name).sarif"
+        $lintFile = Join-Path -Path $FilePath.DirectoryName -ChildPath $lintFile
+        Write-Host " - linting file $(Resolve-Path -Relative -Path $FilePath) to $lintFile"
+        bicep lint $FilePath --diagnostics-format sarif | Out-File -FilePath $lintFile -Encoding ascii -Force
+        $results = Get-Content -Path $lintFile -Raw | ConvertFrom-Json
+        if ($results.runs[0].results.Count -eq 0) {
+            Write-Host " - no linting issues found in $FilePath. Removing $lintFile"
+            Remove-Item -Path $lintFile -Force
+        }
+        else {
+            Write-Host " - linting issues found in $($FilePath): $($results | ConvertTo-Json -Depth 99)"
+            return
+        }
     }
 }
 
@@ -87,6 +99,8 @@ function CheckModuleGitIndex {
         if ($gitStatus -match [regex]::Escape($Path)) {
             Write-Warning "uncommited-check failed: There are uncommitted changes in the specified path: $Path."
             Write-Warning "Ensure all bicep files are formatted correctly and with LF endings before committing."
+            Write-Warning "Ensure no linting report files are present in the module directory."
+            Write-Warning "Uncommitted changes:"
             $gitStatus | Where-Object { $_ -like "*$Path*" } | ForEach-Object {
                 Write-Warning "- $($_.Trim())"
             } 
