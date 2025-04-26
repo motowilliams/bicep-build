@@ -3,7 +3,7 @@ param (
     [Parameter(Mandatory = $false)]
     [ArgumentCompleter({
             param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
-            @("clean", "lint", "format", "compile", "build", "verify-format", "verify-version-files", "add-module") | Where-Object { $_ -like "$wordToComplete*" }
+            @("clean", "lint", "format", "compile", "build", "uncommited-check", "verify-version-files", "add-module") | Where-Object { $_ -like "$wordToComplete*" }
         })]
     [string[]] $Tasks,
     [string] $ModuleDirectory = "modules"  # Default to current directory if not specified
@@ -22,7 +22,7 @@ function ProcessFiles {
     Write-Line
     Get-ChildItem -Path $ModuleDirectory -Recurse -Include *.$FileExtension | ForEach-Object {
         & $Action $_.FullName
-        Write-Host "- $TaskName completed for: $($_.FullName)"
+        Write-Host "- $TaskName completed for: $(Resolve-Path -Relative -Path $_.FullName)"
     }
     # Write-Host "$TaskName Task completed"
     Write-Line
@@ -72,7 +72,7 @@ function CheckModuleGitIndex {
     )
 
     Write-Line
-    Write-Host "Running verify-format task..."
+    Write-Host "Running uncommited-check task..."
     Write-Line
 
     # Run git status to check if the index is dirty
@@ -81,15 +81,17 @@ function CheckModuleGitIndex {
     if (-not [string]::IsNullOrWhiteSpace($gitStatus)) {
         # Check if the specified path exists in the git status output
         if ($gitStatus -match [regex]::Escape($Path)) {
-            Write-Warning "Verify-format failed: There are uncommitted changes in the specified path: $Path."
+            Write-Warning "uncommited-check failed: There are uncommitted changes in the specified path: $Path."
             Write-Warning "Ensure all bicep files are formatted correctly and with LF endings before committing."
-            Write-Warning $($gitStatus | Where-Object { $_ -like "*$Path*" } | Format-List | Out-String)
+            $gitStatus | Where-Object { $_ -like "*$Path*" } | ForEach-Object {
+                Write-Warning "- $($_.Trim())"
+            } 
             Write-Line
             exit 1
         }
     }
 
-    Write-Host "Verify-format task completed. No uncommitted changes detected in the specified path: $Path."
+    Write-Host "uncommited-check task completed. No uncommitted changes detected in the specified path: $Path."
     Write-Line
 }
 
@@ -292,6 +294,7 @@ function Build {
     Lint
     Format
     Compile
+    VerifyVersionFiles
     CheckModuleGitIndex
     Write-Host "Build task completed."
 }
@@ -313,7 +316,7 @@ foreach ($Task in $Tasks) {
         "compile" { Compile }
         "format" { Format }
         "lint" { Lint }
-        "verify-format" { CheckModuleGitIndex -Path $ModuleDirectory }
+        "uncommited-check" { CheckModuleGitIndex -Path $ModuleDirectory }
         "verify-version-files" { VerifyVersionFiles }
         "add-module" { AddModule }
         default { Write-Error "Unknown task: $Task" }
