@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param (
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [ArgumentCompleter({
             param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
             @("clean", "lint", "format", "compile", "build", "verify-format", "verify-version-files", "add-module") | Where-Object { $_ -like "$wordToComplete*" }
@@ -58,17 +58,6 @@ function Compile {
             throw $errorCode
         }
     }
-}
-
-function Build {
-    Write-Host "Running build task..."
-    # Aggregate task: lint, format, and compile
-    Clean
-    Lint
-    Format
-    Compile
-    VerifyFormat
-    Write-Host "Build task completed."
 }
 
 function VerifyFormat {
@@ -147,6 +136,8 @@ function Get-CategoryDirectory {
         [string]$NewDirPrompt = "Enter name for new directory:"
     )
 
+    function Write-Line { Write-Host ("-" * 50) -ForegroundColor Gray }
+
     # Ensure path exists
     if (-not (Test-Path -Path $Path -PathType Container)) {
         Write-Error "The specified path does not exist or is not a directory: $Path"
@@ -157,10 +148,9 @@ function Get-CategoryDirectory {
     $directories = Get-ChildItem -Path $Path -Directory | Sort-Object Name
 
     # Clear console and display header
-    Clear-Host
     Write-Host $Title -ForegroundColor Cyan
-    Write-Host "Available directories in $Path" -ForegroundColor Cyan
-    Write-Host ("-" * 50) -ForegroundColor Gray
+    Write-Host "Existing module categories" -ForegroundColor Cyan
+    Write-Line
 
     # Display directories with indices
     $index = 1
@@ -169,7 +159,7 @@ function Get-CategoryDirectory {
         $index++
     }
 
-    Write-Host ("-" * 50) -ForegroundColor Gray
+    Write-Line
     # Add create new directory option
     Write-Host "N. Create New Category Directory" -ForegroundColor Green
     $createNewDirIndex = 'N'
@@ -211,7 +201,7 @@ function Get-CategoryDirectory {
         exit 0
     }
     elseif ($selection -eq 'N') {
-        # User selected Create New Category Directory
+        # User selected Create New Category 
         Write-Host $NewDirPrompt -ForegroundColor Cyan
         $newDirName = Read-Host
 
@@ -219,68 +209,36 @@ function Get-CategoryDirectory {
             Write-Host "No directory name provided. Operation cancelled." -ForegroundColor Yellow
             return $null
         }
-
-        $newDirPath = Join-Path -Path $Path -ChildPath $newDirName
-
-        # Check if directory already exists
-        if (Test-Path -Path $newDirPath -PathType Container) {
-            Write-Host "Directory already exists: $newDirPath" -ForegroundColor Yellow
-            return $newDirPath
-        }
-
-        try {
-            # Create the new directory
-            $newDir = New-Item -Path $newDirPath -ItemType Directory -ErrorAction Stop
-            Write-Host "Created new directory: $($newDir.FullName)" -ForegroundColor Green
-            return $newDir.FullName
-        }
-        catch {
-            Write-Error "Failed to create directory: $_"
-            return $null
-        }
+        return $newDirName
     }
     else {
         # User selected an existing directory
         $selectedDir = $directories[$selection - 1]
-
-function New-Directory {
-    param (
-        [string]$Path
-    )
-
-    # Check if directory already exists
-    if (Test-Path -Path $Path -PathType Container) {
-        Write-Host "Directory already exists: $Path" -ForegroundColor Yellow
-        return Get-Item -Path $Path
-    }
-
-    try {
-        # Create the new directory
-        New-Item -ItemType Directory -Path $Path -Force | Out-Null
-        Write-Host "Created new directory: $Path" -ForegroundColor Green
-        return Get-Item -Path $Path
-    }
-    catch {
-        Write-Error "Failed to create directory: $Path"
-        return $null
+        return $selectedDir.Name
     }
 }
 
 function AddModule {
     Write-Host "Running add-module task..."
 
-    Get-CategoryDirectory -Path $ModuleDirectory -Title "Select a category to add a module to:" -NewDirPrompt "Enter name for new category:" -OutVariable CategoryPath
-    if (-not $CategoryPath) {
+    $categoryName = Get-CategoryDirectory -Path $ModuleDirectory -Title "Select a category to add a module to:" -NewDirPrompt "Enter name for new category:" 
+    if ([System.String]::IsNullOrWhiteSpace($categoryName)) {
         Write-Host "No category selected. Exiting add-module task."
         return
     }
 
+    # start building the module path, first with the category
+    $modulePath = Join-path -Path $moduleDirectory -ChildPath $categoryName
+
     # Prompt for module name
     $moduleName = Read-Host "Enter the name of the new module"
-    $modulePath = Join-Path -Path $categoryPath -ChildPath $moduleName
-
-    # Create module directory structure
-    New-Item -ItemType Directory -Path $modulePath -Force | Out-Null
+    if ([string]::IsNullOrWhiteSpace($moduleName)) {
+        Write-Host "No module name provided. Exiting add-module task."
+        exit 0
+    }
+    
+    # continue building the module path, adding the module name
+    $modulePath = Join-Path -Path $modulePath -ChildPath $moduleName
 
     # Create blank main.bicep file
     $mainBicepPath = Join-Path -Path $modulePath -ChildPath "main.bicep"
@@ -289,16 +247,31 @@ function AddModule {
     # Create version.json file with current date and preview flag
     $versionFilePath = Join-Path -Path $modulePath -ChildPath "version.json"
     $currentDate = Get-Date -Format "yyyy-MM-dd"
-    $versionContent = @{ version = "$currentDate-preview" } | ConvertTo-Json -Depth 1
-    Set-Content -Path $versionFilePath -Value $versionContent
+    $versionContent = @{ version = "$currentDate-preview" } | ConvertTo-Json -Depth 99
+    New-Item -ItemType File -Path $versionFilePath -Value $versionContent -Force | Out-Null
 
-    Write-Host "Module '$moduleName' has been successfully added under category '$category'."
+    Write-Host "Module '$moduleName' has been successfully added under '$categoryName'."
+}
+
+function Build {
+    Write-Host "Running build task..."
+    # Aggregate task: lint, format, and compile
+    Clean
+    Lint
+    Format
+    Compile
+    VerifyFormat
+    Write-Host "Build task completed."
 }
 
 # Task runner logic
 if ($Tasks -contains "add-module" -and $Tasks.Count -gt 1) {
     Write-Error "The 'add-module' task cannot be combined with other tasks. Please run it separately."
     exit 1
+}
+
+if ($null -eq $Tasks -or ($Tasks.Count -eq 0)) {
+    Build
 }
 
 foreach ($Task in $Tasks) {
