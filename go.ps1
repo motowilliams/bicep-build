@@ -22,7 +22,7 @@ function ProcessFiles {
     Write-Line
     Get-ChildItem -Path $ModuleDirectory -Recurse -Include *.$FileExtension | ForEach-Object {
         & $Action $_.FullName
-        Write-Host "- $TaskName completed for: $(Resolve-Path -Relative -Path $_.FullName)"
+        Write-Host " - $TaskName completed for: $(Resolve-Path -Relative -Path $_.FullName)"
     }
     # Write-Host "$TaskName Task completed"
     Write-Line
@@ -91,7 +91,7 @@ function CheckModuleGitIndex {
         }
     }
 
-    Write-Host "uncommited-check task completed. No uncommitted changes detected in the specified path: $Path."
+    Write-Host "uncommited-check task completed. No uncommitted changes detected in the specified path: $Path"
     Write-Line
 }
 
@@ -295,7 +295,7 @@ function Build {
     Format
     Compile
     VerifyVersionFiles
-    CheckModuleGitIndex
+    CheckModuleGitIndex -Path $ModuleDirectory
     Write-Host "Build task completed."
 }
 
