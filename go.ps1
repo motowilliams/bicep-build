@@ -287,7 +287,7 @@ function Get-CategoryDirectory {
         [string]$Title = "Select a directory:",
 
         [Parameter(Mandatory = $false)]
-        [string]$NewDirPrompt = "Enter name for new directory:"
+        [string]$NewDirPrompt = "Enter name for new module category:"
     )
 
 
@@ -299,6 +299,18 @@ function Get-CategoryDirectory {
 
     # Get all directories in the specified path
     $directories = Get-ChildItem -Path $Path -Directory | Sort-Object Name
+
+    if ([System.String]::IsNullOrEmpty($directories)) {
+        # User selected Create New Category
+        Write-Host $NewDirPrompt -ForegroundColor Cyan
+        $newDirName = Read-Host
+
+        if ([string]::IsNullOrWhiteSpace($newDirName)) {
+            Write-Host "No directory name provided. Operation cancelled." -ForegroundColor Yellow
+            return $null
+        }
+        return $newDirName
+    }
 
     # Clear console and display header
     Write-Host $Title -ForegroundColor Cyan
