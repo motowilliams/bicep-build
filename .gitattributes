@@ -1,0 +1,2 @@
+# Ensure line endings for .bicep files are kept as LF
+*.bicep text eol=lf
