@@ -3,12 +3,14 @@ param (
     [Parameter(Mandatory = $false)]
     [ArgumentCompleter({
             param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
-            @("clean", "lint", "format", "compile", "build", "uncommited-check", "verify-version-files", "add-module") | Where-Object { $_ -like "$wordToComplete*" }
+            @("clean", "lint", "format", "compile", "build", "uncommited-check", "verify-version-files", "add-module", "publish-modules", "publish-all-modules") | Where-Object { $_ -like "$wordToComplete*" }
         })]
     [string[]] $Tasks,
-    [string] $ModuleDirectory = "modules"  # Default to current directory if not specified
+    [string] $ModuleDirectory = "modules", # Default to current directory if not specified
+    [string] $RegistryUri = $env:AZURE_BICEP_REGISTRYURI
 )
 
+$rootBicepFile = "main.bicep"
 $versionFileName = "version.json"
 
 # Helper function to process files
@@ -28,6 +30,97 @@ function ProcessFiles {
     }
     # Write-Host "$TaskName Task completed"
     Write-Line
+}
+
+function Get-ChangedModules {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string] $BaseBranch = "master",
+        [switch] $ShowAll
+    )
+
+    if ($ShowAll) {
+        #this is a directory listing that will run as xplat
+        $files = Get-ChildItem -Recurse (Join-Path -Path $ModuleDirectory -ChildPath "*" -AdditionalChildPath $versionFileName)
+    }
+    else {
+        # Get the current branch name
+        $currentBranch = git rev-parse --abbrev-ref HEAD
+        Write-Host "Comparing changes between $BaseBranch and $currentBranch"
+
+        # Get list of changed files between branches / filter by git path output vs platform specific separator
+        # Note: git diff --name-only will only show files that are different between the two branches
+        $files = git diff --name-only $BaseBranch $currentBranch | Where-Object { $_ -like "$ModuleDirectory/*/$versionFileName" }
+    }
+
+    $files = $files | ForEach-Object { (Get-Item -Path $_).Directory }
+
+    $changeModules = $files | ForEach-Object {
+        [PSCustomObject]@{
+            ModulePath     = $_.FullName
+            BicepFile      = Join-Path -Path $_.FullName -ChildPath $rootBicepFile
+            VersionFile    = Join-Path -Path $_.FullName -ChildPath $versionFileName
+            ModuleName     = $_.Name
+            ModuleCategory = $_.Parent.Name
+            ModuleVersion  = Get-Content (Join-Path -Path $_.FullName -ChildPath $versionFileName) | ConvertFrom-Json | Select-Object -ExpandProperty version
+        }
+    }
+
+    Write-Output $changeModules
+}
+
+function Publish-Module {
+    [CmdletBinding(SupportsShouldProcess)]
+    param (
+        [Parameter(ValueFromPipeline)]
+        [PSCustomObject]$Module
+    )
+
+    begin {
+        # Check if the Az module is available
+        if (-not (Get-Module -Name Az -ListAvailable)) {
+            Write-Error "The Az module is not installed. Please install it using 'Install-Module -Name Az' before running this script."
+            return
+        }
+
+        $RegistryUri = $RegistryUri -replace '^br:', '' # Remove 'br:' prefix if present
+        if ([System.String]::IsNullOrEmpty($RegistryUri)) {
+            throw "The registry name is not specified. Please supply the Registry argument or set the AZURE_BICEP_REGISTRY environment variable."
+            return
+        }
+    }
+
+    process {
+        # Ensure the Az module is imported
+        if (-not (Get-Module -Name Az -ListAvailable)) {
+            Write-Error "The Az module is not installed. Please install it using 'Install-Module -Name Az' before running this script."
+            return
+        }
+
+        # Construct the Azure Bicep registry path
+        $RegistryTarget = "br:$RegistryUri/bicep/$($Module.ModuleCategory)/$($Module.ModuleName):$($Module.ModuleVersion)"
+
+        # Use ShouldProcess to support WhatIf
+        $publishMessage = "Publishing module $($Module.ModuleName) from path: $($Module.ModulePath) to $RegistryTarget"
+        Write-Host "Starting: $publishMessage"
+        if ($PSCmdlet.ShouldProcess($publishMessage)) {
+            try {
+                # Connect to the Azure Bicep registry to keep the session alive
+                Connect-AzContainerRegistry -Name ($RegistryUri -replace '.azurecr.io', '') | Out-Null
+
+                # Publish the Bicep module to the Azure Bicep registry
+                Publish-AzBicepModule -FilePath $Module.BicepFile -Target $RegistryTarget -WithSource -Force
+                Write-Host "Success: $publishMessage"
+            }
+            catch {
+                throw "Failed: $publishMessage. Error: $LASTERROR"
+            }
+        }
+        else {
+            Write-Host "What if: Skipping $publishMessage"
+        }
+    }
 }
 
 function Clean {
@@ -105,7 +198,7 @@ function CheckModuleGitIndex {
             Write-Warning "Uncommitted changes:"
             $gitStatus | Where-Object { $_ -like "*$Path*" } | ForEach-Object {
                 Write-Warning "- $($_.Trim())"
-            } 
+            }
             Write-Line
             exit 1
         }
@@ -176,7 +269,7 @@ function VerifyVersionFiles {
     Write-Line
 }
 
-function Write-Line { 
+function Write-Line {
     Write-Host ("-" * 72) -ForegroundColor Gray
 }
 
@@ -257,7 +350,7 @@ function Get-CategoryDirectory {
         exit 0
     }
     elseif ($selection -eq 'N') {
-        # User selected Create New Category 
+        # User selected Create New Category
         Write-Host $NewDirPrompt -ForegroundColor Cyan
         $newDirName = Read-Host
 
@@ -277,7 +370,7 @@ function Get-CategoryDirectory {
 function AddModule {
     Write-Line; Write-Host "Running add-module task..."
 
-    $categoryName = Get-CategoryDirectory -Path $ModuleDirectory -Title "Select a category to add a module to:" -NewDirPrompt "Enter name for new category:" 
+    $categoryName = Get-CategoryDirectory -Path $ModuleDirectory -Title "Select a category to add a module to:" -NewDirPrompt "Enter name for new category:"
     if ([System.String]::IsNullOrWhiteSpace($categoryName)) {
         Write-Host "No category selected. Exiting add-module task."
         return
@@ -292,7 +385,7 @@ function AddModule {
         Write-Host "No module name provided. Exiting add-module task."
         exit 0
     }
-    
+
     # continue building the module path, adding the module name
     $modulePath = Join-Path -Path $modulePath -ChildPath $moduleName
 
@@ -346,6 +439,8 @@ foreach ($Task in $Tasks) {
         "uncommited-check" { CheckModuleGitIndex -Path $ModuleDirectory }
         "verify-version-files" { VerifyVersionFiles }
         "add-module" { AddModule }
+        "publish-modules" { Get-ChangedModules | Publish-Module }
+        "publish-all-modules" { Get-ChangedModules -ShowAll | Publish-Module }
         default { Write-Error "Unknown task: $Task" }
     }
 }
