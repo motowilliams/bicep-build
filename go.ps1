@@ -142,15 +142,18 @@ function Lint {
         param ($FilePath)
         $lintFile = "$($FilePath.Directory.Parent.Name).$($FilePath.Directory.Name).sarif"
         $lintFile = Join-Path -Path $FilePath.DirectoryName -ChildPath $lintFile
-        Write-Host " - linting file $(Resolve-Path -Relative -Path $FilePath) to $lintFile"
+        New-Item -ItemType File -Path $lintFile -Force | Out-Null
+        $lintFileRelative = Resolve-Path -Relative -Path $lintFile
+        $filePathRelative = Resolve-Path -Relative -Path $FilePath
+        Write-Host " - linting file $filePathRelative to $lintFileRelative"
         bicep lint $FilePath --diagnostics-format sarif | Out-File -FilePath $lintFile -Encoding ascii -Force
         $results = Get-Content -Path $lintFile -Raw | ConvertFrom-Json
         if ($results.runs[0].results.Count -eq 0) {
-            Write-Host " - no linting issues found in $FilePath. Removing $lintFile"
+            Write-Host " - no linting issues found in $filePathRelative. Removing $lintFileRelative"
             Remove-Item -Path $lintFile -Force
         }
         else {
-            Write-Host " - linting issues found in $($FilePath): $($results | ConvertTo-Json -Depth 99)"
+            Write-Host " - linting issues found in $($filePathRelative): $($results | ConvertTo-Json -Depth 99)"
             return
         }
     }
