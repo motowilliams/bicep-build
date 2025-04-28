@@ -127,13 +127,14 @@ function Clean {
     Write-Line
     Write-Host "Running clean task..."
     Write-Line
-    $fileSplat = "*.sarif"
+    $includeFiles = ("*.sarif","*.tmp","*.json","*.bicep")
+    $excludeFiles = ("version.json","main.bicep")
     # Delete all *.sarif files in the project
-    Get-ChildItem -Path . -Recurse -Include $fileSplat | ForEach-Object {
+    Get-ChildItem -Path $ModuleDirectory -Recurse -Include $includeFiles -Exclude $excludeFiles | ForEach-Object {
         Write-Host " - Deleting: $(Resolve-Path -Relative -Path $_.FullName)"
         Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue
     }
-    Write-Host "Clean task completed. All $fileSplat files have been deleted."
+    Write-Host "Clean task completed. All $($includeFiles -join ", ") files have been deleted from $ModuleDirectory. Excluding $($excludeFiles -join ", ")."
     Write-Line
 }
 
